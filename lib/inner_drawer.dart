@@ -143,7 +143,7 @@ class InnerDrawerState extends State<InnerDrawer>
 
   double _initWidth = _kWidth;
   Orientation _orientation = Orientation.portrait;
-  InnerDrawerDirection? _position;
+  late InnerDrawerDirection _position;
 
   @override
   void initState() {
@@ -432,9 +432,10 @@ class InnerDrawerState extends State<InnerDrawer>
     final Widget? invC = _invisibleCover();
 
     final Widget scaffoldChild = Stack(
-      children: <Widget?>[widget.scaffold, invC != null ? invC : null]
-          .where((a) => a != null)
-          .toList() as List<Widget>,
+      children: <Widget>[
+        widget.scaffold,
+        if (invC != null) invC,
+      ].toList(),
     );
 
     Widget container = Container(
@@ -568,9 +569,9 @@ class InnerDrawerState extends State<InnerDrawer>
 
     /// initialize the correct width
     if (_initWidth == 400 ||
-        MediaQuery.of(context).orientation != _orientation) {
+        MediaQuery.orientationOf(context) != _orientation) {
       _updateWidth();
-      _orientation = MediaQuery.of(context).orientation;
+      _orientation = MediaQuery.orientationOf(context);
     }
 
     /// wFactor depends of offset and is used by the second Align that contains the Scaffold
@@ -597,27 +598,29 @@ class InnerDrawerState extends State<InnerDrawer>
             excludeFromSemantics: true,
             child: RepaintBoundary(
               child: Stack(
-                children: <Widget?>[
-                  ///Gradient
-                  Container(
-                    width: _controller.value == 0 ||
-                            _animationType == InnerDrawerAnimation.linear
-                        ? 0
-                        : null,
-                    color: _colorTransitionChild.evaluate(_controller),
-                  ),
-                  Align(
-                    alignment: _drawerOuterAlignment!,
-                    child: Align(
-                        alignment: _drawerInnerAlignment!,
-                        widthFactor: wFactor,
-                        child: RepaintBoundary(child: _scaffold())),
-                  ),
+                children: List<Widget>.from(
+                  <Widget?>[
+                    ///Gradient
+                    Container(
+                      width: _controller.value == 0 ||
+                              _animationType == InnerDrawerAnimation.linear
+                          ? 0
+                          : null,
+                      color: _colorTransitionChild.evaluate(_controller),
+                    ),
+                    Align(
+                      alignment: _drawerOuterAlignment!,
+                      child: Align(
+                          alignment: _drawerInnerAlignment!,
+                          widthFactor: wFactor,
+                          child: RepaintBoundary(child: _scaffold())),
+                    ),
 
-                  ///Trigger
-                  _trigger(AlignmentDirectional.centerStart, _leftChild),
-                  _trigger(AlignmentDirectional.centerEnd, _rightChild),
-                ].where((a) => a != null).toList() as List<Widget>,
+                    ///Trigger
+                    _trigger(AlignmentDirectional.centerStart, _leftChild),
+                    _trigger(AlignmentDirectional.centerEnd, _rightChild),
+                  ].where((a) => a != null).toList(),
+                ),
               ),
             ),
           ),
