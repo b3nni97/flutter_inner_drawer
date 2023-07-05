@@ -4,6 +4,7 @@
 // more details:
 // https://github.com/flutter/flutter/blob/master/packages/flutter/lib/src/material/drawer.dart
 
+import 'dart:collection';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -11,7 +12,8 @@ import 'package:flutter/widgets.dart';
 
 /// Signature for the callback that's called when a [InnerDrawer] is
 /// opened or closed.
-typedef InnerDrawerCallback = void Function(bool isOpened);
+typedef InnerDrawerCallback = void Function(
+    bool isOpened, InnerDrawerDirection direction);
 
 /// Signature for when a pointer that is in contact with the screen and moves to the right or left
 /// values between 1 and 0
@@ -35,33 +37,37 @@ enum InnerDrawerAnimation {
 const double _kWidth = 400;
 const double _kMinFlingVelocity = 365.0;
 const double _kEdgeDragWidth = 20.0;
-const Duration _kBaseSettleDuration = Duration(milliseconds: 246);
+const Duration _kBaseSettleDuration = Duration(milliseconds: 300);
 
 class InnerDrawer extends StatefulWidget {
-  const InnerDrawer(
-      {GlobalKey? key,
-      this.leftChild,
-      this.rightChild,
-      required this.scaffold,
-      this.offset = const IDOffset.horizontal(0.4),
-      this.scale = const IDOffset.horizontal(1),
-      this.proportionalChildArea = true,
-      this.borderRadius = 0,
-      this.onTapClose = false,
-      this.tapScaffoldEnabled = false,
-      this.swipe = true,
-      this.swipeChild = false,
-      this.duration,
-      this.velocity = 1,
-      this.boxShadow,
-      this.colorTransitionChild,
-      this.colorTransitionScaffold,
-      this.leftAnimationType = InnerDrawerAnimation.static,
-      this.rightAnimationType = InnerDrawerAnimation.static,
-      this.backgroundDecoration,
-      this.innerDrawerCallback,
-      this.onDragUpdate})
-      : assert(leftChild != null || rightChild != null),
+  const InnerDrawer({
+    GlobalKey? key,
+    this.leftChild,
+    this.rightChild,
+    required this.scaffold,
+    this.offset = const IDOffset.horizontal(0.4),
+    this.scale = const IDOffset.horizontal(1),
+    this.proportionalChildArea = true,
+    this.borderRadius = 0,
+    this.onTapClose = false,
+    this.tapScaffoldEnabled = false,
+    this.swipe = true,
+    this.swipeChild = false,
+    this.duration,
+    this.velocity = 1,
+    this.boxShadow,
+    this.colorTransitionChild,
+    this.colorTransitionScaffold,
+    this.leftAnimationType = InnerDrawerAnimation.static,
+    this.rightAnimationType = InnerDrawerAnimation.static,
+    this.backgroundDecoration,
+    this.innerDrawerCallback,
+    this.onDragUpdate,
+    this.allowInvisibleCoverForDirection = const [
+      InnerDrawerDirection.start,
+      InnerDrawerDirection.end,
+    ],
+  })  : assert(leftChild != null || rightChild != null),
         assert(scaffold != null),
         super(key: key);
 
@@ -130,6 +136,9 @@ class InnerDrawer extends StatefulWidget {
   /// when a pointer that is in contact with the screen and moves to the right or left
   final InnerDragUpdateCallback? onDragUpdate;
 
+  /// Allow to show the cover for each direction of the InnerDrawer.
+  final List<InnerDrawerDirection> allowInvisibleCoverForDirection;
+
   @override
   InnerDrawerState createState() => InnerDrawerState();
 }
@@ -144,9 +153,16 @@ class InnerDrawerState extends State<InnerDrawer>
   double _initWidth = _kWidth;
   Orientation _orientation = Orientation.portrait;
   late InnerDrawerDirection _position;
+  InnerDrawerDirection get position => _position;
+
+  late HashSet<InnerDrawerDirection> _allowInvisibleCoverForDirectionSet;
 
   @override
   void initState() {
+    _allowInvisibleCoverForDirectionSet = HashSet.from(
+      widget.allowInvisibleCoverForDirection,
+    );
+
     _position = _leftChild != null
         ? InnerDrawerDirection.start
         : InnerDrawerDirection.end;
@@ -213,7 +229,7 @@ class InnerDrawerState extends State<InnerDrawer>
         if (_previouslyOpened != opened) {
           _previouslyOpened = opened;
           if (widget.innerDrawerCallback != null)
-            widget.innerDrawerCallback!(opened);
+            widget.innerDrawerCallback!(opened, _position);
         }
         _ensureHistoryEntry();
         break;
@@ -221,7 +237,7 @@ class InnerDrawerState extends State<InnerDrawer>
         if (_previouslyOpened != opened) {
           _previouslyOpened = opened;
           if (widget.innerDrawerCallback != null)
-            widget.innerDrawerCallback!(opened);
+            widget.innerDrawerCallback!(opened, _position);
         }
         _historyEntry?.remove();
         _historyEntry = null;
@@ -234,11 +250,9 @@ class InnerDrawerState extends State<InnerDrawer>
   }
 
   late AnimationController _controller;
+  AnimationController get controller => _controller;
 
-  void _handleDragDown(DragDownDetails details) {
-    _controller.stop();
-    //_ensureHistoryEntry();
-  }
+  void onHorizontalDragDown(DragDownDetails details) {}
 
   final GlobalKey _drawerKey = GlobalKey();
 
@@ -268,7 +282,7 @@ class InnerDrawerState extends State<InnerDrawer>
 
   bool _previouslyOpened = false;
 
-  void _move(DragUpdateDetails details) {
+  void onHorizontalDragUpdate(DragUpdateDetails details) {
     double delta = details.primaryDelta! / _width;
 
     if (delta > 0 && _controller.value == 1 && _leftChild != null)
@@ -309,11 +323,11 @@ class InnerDrawerState extends State<InnerDrawer>
 
     final bool opened = _controller.value < 0.5 ? true : false;
     if (opened != _previouslyOpened && widget.innerDrawerCallback != null)
-      widget.innerDrawerCallback!(opened);
+      widget.innerDrawerCallback!(opened, _position);
     _previouslyOpened = opened;
   }
 
-  void _settle(DragEndDetails details) {
+  void onHorizontalDragEnd(DragEndDetails details) {
     if (_controller.isDismissed) return;
     if (details.velocity.pixelsPerSecond.dx.abs() >= _kMinFlingVelocity) {
       double visualVelocity =
@@ -467,7 +481,7 @@ class InnerDrawerState extends State<InnerDrawer>
     // Vertical translate
     if (widget.offset != null &&
         (widget.offset.top > 0 || widget.offset.bottom > 0)) {
-      final double translateY = MediaQuery.of(context).size.height *
+      final double translateY = MediaQuery.sizeOf(context).height *
           (widget.offset.top > 0 ? -widget.offset.top : widget.offset.bottom);
       container = Transform.translate(
         offset: Offset(0, translateY * (1 - _controller.value)),
@@ -480,8 +494,14 @@ class InnerDrawerState extends State<InnerDrawer>
 
   ///Disable the scaffolding tap when the drawer is open
   Widget? _invisibleCover() {
-    final Container container = Container(
-      color: _colorTransitionScaffold.evaluate(_controller),
+    // Disable the invisible cover if it´s not allowed.
+    final showInvisibleCover =
+        _allowInvisibleCoverForDirectionSet.contains(_position);
+
+    final container = Container(
+      color: showInvisibleCover
+          ? _colorTransitionScaffold.evaluate(_controller)
+          : Colors.transparent,
     );
     if (_controller.value != 1.0 && !widget.tapScaffoldEnabled)
       return BlockSemantics(
@@ -512,14 +532,14 @@ class InnerDrawerState extends State<InnerDrawer>
         _position == InnerDrawerDirection.start ? _leftChild : _rightChild;
     if (_swipeChild) {
       child = GestureDetector(
-        onHorizontalDragUpdate: _move,
-        onHorizontalDragEnd: _settle,
+        onHorizontalDragUpdate: onHorizontalDragUpdate,
+        onHorizontalDragEnd: onHorizontalDragEnd,
         child: child,
       );
     }
     final Widget container = Container(
       width: widget.proportionalChildArea ? _width - _widthWithOffset : _width,
-      height: MediaQuery.of(context).size.height,
+      height: MediaQuery.sizeOf(context).height,
       child: child,
     );
 
@@ -544,23 +564,29 @@ class InnerDrawerState extends State<InnerDrawer>
   /// Trigger Area
   Widget? _trigger(AlignmentDirectional alignment, Widget? child) {
     assert(alignment != null);
-    final bool drawerIsStart = _position == InnerDrawerDirection.start;
-    final EdgeInsets padding = MediaQuery.of(context).padding;
-    double dragAreaWidth = drawerIsStart ? padding.left : padding.right;
-
-    if (Directionality.of(context) == TextDirection.rtl)
-      dragAreaWidth = drawerIsStart ? padding.right : padding.left;
-    dragAreaWidth = max(dragAreaWidth, _kEdgeDragWidth);
 
     if (_controller.status == AnimationStatus.completed &&
         _swipe &&
-        child != null)
-      return Align(
-        alignment: alignment,
-        child: Container(color: Colors.transparent, width: dragAreaWidth),
+        child != null) {
+      return Builder(
+        builder: (context) {
+          final bool drawerIsStart = _position == InnerDrawerDirection.start;
+          final EdgeInsets padding = MediaQuery.paddingOf(context);
+          double dragAreaWidth = drawerIsStart ? padding.left : padding.right;
+
+          if (Directionality.of(context) == TextDirection.rtl)
+            dragAreaWidth = drawerIsStart ? padding.right : padding.left;
+          dragAreaWidth = max(dragAreaWidth, _kEdgeDragWidth);
+
+          return Align(
+            alignment: alignment,
+            child: Container(color: Colors.transparent, width: dragAreaWidth),
+          );
+        },
       );
-    else
+    } else {
       return null;
+    }
   }
 
   @override
@@ -592,9 +618,9 @@ class InnerDrawerState extends State<InnerDrawer>
           GestureDetector(
             key: _gestureDetectorKey,
             onTap: () {},
-            onHorizontalDragDown: _swipe ? _handleDragDown : null,
-            onHorizontalDragUpdate: _swipe ? _move : null,
-            onHorizontalDragEnd: _swipe ? _settle : null,
+            onHorizontalDragDown: _swipe ? onHorizontalDragDown : null,
+            onHorizontalDragUpdate: _swipe ? onHorizontalDragUpdate : null,
+            onHorizontalDragEnd: _swipe ? onHorizontalDragEnd : null,
             excludeFromSemantics: true,
             child: RepaintBoundary(
               child: Stack(
@@ -602,11 +628,10 @@ class InnerDrawerState extends State<InnerDrawer>
                   <Widget?>[
                     ///Gradient
                     Container(
-                      width: _controller.value == 0 ||
-                              _animationType == InnerDrawerAnimation.linear
-                          ? 0
-                          : null,
-                      color: _colorTransitionChild.evaluate(_controller),
+                      width: _controller.value == 0 ? 0 : null,
+                      color: _animationType == InnerDrawerAnimation.linear
+                          ? Colors.transparent
+                          : _colorTransitionChild.evaluate(_controller),
                     ),
                     Align(
                       alignment: _drawerOuterAlignment!,
