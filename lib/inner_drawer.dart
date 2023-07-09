@@ -205,7 +205,19 @@ class InnerDrawerState extends State<InnerDrawer>
     }
   }
 
+  LocalHistoryEntry? _historyEntry;
   final FocusScopeNode _focusScopeNode = FocusScopeNode();
+
+  void _ensureHistoryEntry() {
+    if (_historyEntry == null) {
+      final ModalRoute<dynamic>? route = ModalRoute.of(context);
+      if (route != null) {
+        _historyEntry = LocalHistoryEntry(onRemove: _handleHistoryEntryRemoved);
+        route.addLocalHistoryEntry(_historyEntry!);
+        FocusScope.of(context).setFirstFocus(_focusScopeNode);
+      }
+    }
+  }
 
   void _animationStatusChanged(AnimationStatus status) {
     final bool opened = _controller.value < 0.5 ? true : false;
@@ -221,6 +233,7 @@ class InnerDrawerState extends State<InnerDrawer>
           if (widget.innerDrawerCallback != null)
             widget.innerDrawerCallback!(opened, _position);
         }
+        _ensureHistoryEntry();
         break;
       case AnimationStatus.completed:
         if (_previouslyOpened != opened) {
@@ -228,7 +241,15 @@ class InnerDrawerState extends State<InnerDrawer>
           if (widget.innerDrawerCallback != null)
             widget.innerDrawerCallback!(opened, _position);
         }
+
+        _historyEntry?.remove();
+        _historyEntry = null;
     }
+  }
+
+  void _handleHistoryEntryRemoved() {
+    _historyEntry = null;
+    close();
   }
 
   late AnimationController _controller;
